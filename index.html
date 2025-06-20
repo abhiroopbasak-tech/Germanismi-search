@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Germanismi Search Engine</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Germanismi Search Engine</h1>
+
+    <div class="search-container">
+      <div class="search-field">
+        <label for="titleSearch">Titolo articolo</label>
+        <input type="text" id="titleSearch" placeholder="Search title..." />
+      </div>
+
+      <div class="search-field">
+        <label for="volumeSearch">Volume</label>
+        <select id="volumeSearch"></select>
+      </div>
+
+      <div class="search-field">
+        <label for="fascicoloSearch">Fascicolo</label>
+        <select id="fascicoloSearch"></select>
+      </div>
+
+      <div class="search-field">
+        <label for="dataSearch">Data pubbl.</label>
+        <select id="dataSearch"></select>
+      </div>
+
+      <div class="search-field">
+        <label for="colStartSearch">Nr. col. inizio</label>
+        <select id="colStartSearch"></select>
+      </div>
+
+      <div class="search-field">
+        <label for="colEndSearch">Nr. col. fine</label>
+        <select id="colEndSearch"></select>
+      </div>
+
+      <div class="search-field" style="align-self: flex-end;">
+        <button id="searchBtn">Search</button>
+      </div>
+    </div>
+
+    <div id="results"></div>
+  </div>
+
+  <script src="search.js"></script>
+</body>
+</html>
