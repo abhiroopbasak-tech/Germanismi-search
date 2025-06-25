@@ -1,3 +1,5 @@
+// search.js
+
 let data = [];
 
 // Load and parse TSV data from the Excel-exported file
@@ -27,8 +29,21 @@ function populateDropdowns(data) {
     'colEndSearch': 'Nr. col. fine'
   };
 
+  const forceNumericFields = ['Nr. col. inizio', 'Nr. col. fine'];
+
   for (const [elementId, field] of Object.entries(dropdownFields)) {
-    const uniqueValues = [...new Set(data.map(row => row[field]).filter(Boolean))].sort();
+    let uniqueValues = [...new Set(data.map(row => row[field]).filter(Boolean))];
+
+    if (forceNumericFields.includes(field)) {
+      uniqueValues = uniqueValues
+        .filter(v => /^\d+$/.test(v))
+        .map(v => parseInt(v))
+        .sort((a, b) => a - b)
+        .map(v => String(v));
+    } else {
+      uniqueValues.sort();
+    }
+
     const dropdown = document.getElementById(elementId);
     dropdown.innerHTML = '<option value="">-- Any --</option>' +
       uniqueValues.map(v => `<option value="${v}">${v}</option>`).join('');
@@ -46,33 +61,47 @@ function phraseMatch(text, phrase) {
   return text.toLowerCase().includes(phrase.toLowerCase());
 }
 
+function matchesField(query, value, field) {
+  if (!query) return true;
+  value = String(value || '');
+
+  // Dropdown-like exact fields
+  if (['Volume', 'Fascicolo', 'Data pubbl.', 'Nr. col. inizio', 'Nr. col. fine'].includes(field)) {
+    const parts = value.split(/[-/;,]/).map(p => p.trim());
+    return query === value || parts.includes(query);
+  }
+
+  // Free-text field: Titolo articolo
+  const phraseMatchPattern = /\"(.*?)\"/g;
+  const phrases = [...query.matchAll(phraseMatchPattern)].map(match => match[1]);
+  const remainingQuery = query.replace(phraseMatchPattern, '').trim();
+  const words = remainingQuery.split(/\s+/).filter(Boolean);
+
+  for (const phrase of phrases) {
+    if (!phraseMatch(value, phrase)) return false;
+  }
+
+  for (const word of words) {
+    if (!wildcardToRegExp(word).test(value)) return false;
+  }
+
+  return true;
+}
+
 function searchDatabase(queries, fields) {
   const allBlank = Object.values(queries).every(v => !v);
   if (allBlank) return data;
 
-  return data.filter(row => {
-    return fields.every(field => {
-      const query = queries[field];
-      if (!query) return true; // no filter for this field
+  const results = [];
 
-      const phraseMatchPattern = /\"(.*?)\"/g;
-      const phrases = [...query.matchAll(phraseMatchPattern)].map(match => match[1]);
-      const remainingQuery = query.replace(phraseMatchPattern, '').trim();
-      const words = remainingQuery.split(/\s+/).filter(Boolean);
-
-      const value = String(row[field] || '');
-
-      // Check all words match pattern
-      const allWordsMatch = words.every(word => wildcardToRegExp(word).test(value));
-      if (!allWordsMatch) return false;
-
-      // Check all phrases included
-      const allPhrasesMatch = phrases.every(phrase => phraseMatch(value, phrase));
-      if (!allPhrasesMatch) return false;
-
-      return true; // all conditions met for this field
-    });
+  data.forEach(row => {
+    const isMatch = fields.every(field => matchesField(queries[field], row[field], field));
+    if (isMatch) {
+      results.push(row);
+    }
   });
+
+  return results;
 }
 
 function renderTable(rows, headers) {
