@@ -7,12 +7,15 @@ This tool allows users to filter articles by multiple fields and supports advanc
 
 ## 📁 Project Structure
 
-project-root/
-├── index.html # Main HTML file
-├── style.css # Styling for the interface
-├── search.js # Core logic: data loading, searching, rendering
+```plaintext
+germanismi-search/
+├── index.html           # Main HTML interface
+├── style.css            # CSS styling for the table and layout
+├── search.js            # JavaScript logic for loading data, filtering, and rendering
+├── README.md            # Project documentation (this file)
 └── data/
-└── germanismi.tsv # Source TSV file exported from Excel
+    └── germanismi.tsv   # Excel-exported TSV data file with headers
+
 ---
 
 ## 🔍 Features
