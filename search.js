@@ -1,8 +1,5 @@
-// search.js
-
 let data = [];
 
-// Load and parse TSV data from the Excel-exported file
 async function loadData() {
   const response = await fetch('data/germanismi.tsv');
   const text = await response.text();
@@ -20,92 +17,118 @@ async function loadData() {
   renderTable(data, headers);
 }
 
+function expandRanges(values) {
+  const expanded = new Set();
+
+  values.forEach(value => {
+    if (!value) return;
+    const parts = value.split(/[-–]/).map(p => p.trim());
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+      const start = parseInt(parts[0], 10);
+      const end = parseInt(parts[1], 10);
+      for (let i = start; i <= end; i++) expanded.add(i.toString());
+    } else {
+      expanded.add(value);
+    }
+  });
+
+  return Array.from(expanded).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+
 function populateDropdowns(data) {
-  const dropdownFields = {
+  const dropdownMap = {
     'volumeSearch': 'Volume',
     'fascicoloSearch': 'Fascicolo',
     'dataSearch': 'Data pubbl.',
     'colStartSearch': 'Nr. col. inizio',
-    'colEndSearch': 'Nr. col. fine'
+    'colEndSearch': 'Nr. col. fine',
   };
 
-  const forceNumericFields = ['Nr. col. inizio', 'Nr. col. fine'];
-
-  for (const [elementId, field] of Object.entries(dropdownFields)) {
-    let uniqueValues = [...new Set(data.map(row => row[field]).filter(Boolean))];
-
-    if (forceNumericFields.includes(field)) {
-      uniqueValues = uniqueValues
-        .filter(v => /^\d+$/.test(v))
-        .map(v => parseInt(v))
-        .sort((a, b) => a - b)
-        .map(v => String(v));
-    } else {
-      uniqueValues.sort();
-    }
-
+  for (const [elementId, field] of Object.entries(dropdownMap)) {
+    const rawValues = data.map(row => row[field]).filter(Boolean);
+    const values = expandRanges(rawValues);
     const dropdown = document.getElementById(elementId);
-    dropdown.innerHTML = '<option value="">-- Any --</option>' +
-      uniqueValues.map(v => `<option value="${v}">${v}</option>`).join('');
+    if (dropdown) {
+      dropdown.innerHTML = '<option value="">-- Any --</option>' +
+        values.map(v => `<option value="${v}">${v}</option>`).join('');
+    }
   }
+
+  // Populate 4 separate author dropdowns
+  ['Autore1', 'Autore2', 'Autore3', 'Autore4'].forEach(field => {
+    const dropdown = document.getElementById(field.toLowerCase() + 'Search');
+    if (dropdown) {
+      const authors = Array.from(new Set(data.map(row => row[field]).filter(Boolean))).sort();
+      dropdown.innerHTML = '<option value="">-- Any --</option>' +
+        authors.map(v => `<option value="${v}">${v}</option>`).join('');
+    }
+  });
 }
 
-function wildcardToRegExp(pattern) {
-  const escaped = pattern.replace(/[-[\]{}()+.,\\^$|#]/g, "\\$&")
-                         .replace(/\*/g, ".*")
-                         .replace(/\?/g, ".?");
-  return new RegExp(escaped, "i");
+function expandFieldValue(fieldValue) {
+  if (!fieldValue) return [];
+  const parts = fieldValue.split(/[-–]/).map(p => p.trim());
+  if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    const start = parseInt(parts[0], 10);
+    const end = parseInt(parts[1], 10);
+    return Array.from({ length: end - start + 1 }, (_, i) => (start + i).toString());
+  }
+  return [fieldValue];
 }
 
-function phraseMatch(text, phrase) {
-  return text.toLowerCase().includes(phrase.toLowerCase());
-}
-
-function matchesField(query, value, field) {
-  if (!query) return true;
-  value = String(value || '');
-
-  // Dropdown-like exact fields
-  if (['Volume', 'Fascicolo', 'Data pubbl.', 'Nr. col. inizio', 'Nr. col. fine'].includes(field)) {
-    const parts = value.split(/[-/;,]/).map(p => p.trim());
-    return query === value || parts.includes(query);
-  }
-
-  // Free-text field: Titolo articolo
-  const phraseMatchPattern = /\"(.*?)\"/g;
-  const phrases = [...query.matchAll(phraseMatchPattern)].map(match => match[1]);
-  const remainingQuery = query.replace(phraseMatchPattern, '').trim();
-  const words = remainingQuery.split(/\s+/).filter(Boolean);
-
-  for (const phrase of phrases) {
-    if (!phraseMatch(value, phrase)) return false;
-  }
-
-  for (const word of words) {
-    if (!wildcardToRegExp(word).test(value)) return false;
-  }
-
-  return true;
+function matchesDropdownField(rowValue, query) {
+  const expanded = expandFieldValue(rowValue);
+  return expanded.includes(query);
 }
 
 function searchDatabase(queries, fields) {
   const allBlank = Object.values(queries).every(v => !v);
   if (allBlank) return data;
 
-  const results = [];
+  return data.filter(row => {
+    return fields.every(field => {
+      const query = queries[field];
+      if (!query) return true;
 
-  data.forEach(row => {
-    const isMatch = fields.every(field => matchesField(queries[field], row[field], field));
-    if (isMatch) {
-      results.push(row);
-    }
+      const value = String(row[field] || '');
+
+      if (['Volume', 'Fascicolo', 'Data pubbl.', 'Nr. col. inizio', 'Nr. col. fine'].includes(field)) {
+        return matchesDropdownField(value, query);
+      }
+
+      // For each AutoreX, match exact value
+      if (['Autore1', 'Autore2', 'Autore3', 'Autore4'].includes(field)) {
+        return row[field] === query;
+      }
+
+      // Text search on Titolo articolo
+      const phraseMatchPattern = /\"(.*?)\"/g;
+      const phrases = [...query.matchAll(phraseMatchPattern)].map(match => match[1]);
+      const remainingQuery = query.replace(phraseMatchPattern, '').trim();
+      const words = remainingQuery.split(/\s+/).filter(Boolean);
+
+      let matchScore = 0;
+      for (const word of words) {
+        const regex = new RegExp(word.replace(/\*/g, '.*'), 'i');
+        if (regex.test(value)) matchScore += 1;
+      }
+
+      for (const phrase of phrases) {
+        if (value.toLowerCase().includes(phrase.toLowerCase())) matchScore += 5;
+      }
+
+      return matchScore > 0;
+    });
   });
-
-  return results;
 }
 
 function renderTable(rows, headers) {
   const container = document.getElementById('results');
+  if (!rows.length) {
+    container.innerHTML = '<p>No results found.</p>';
+    return;
+  }
+
   const thead = `<thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>`;
   const tbody = rows.map(row => `<tr>${headers.map(h => `<td>${row[h] || ''}</td>`).join('')}</tr>`).join('');
   container.innerHTML = `<table class="styled-table">${thead}<tbody>${tbody}</tbody></table>`;
@@ -120,7 +143,11 @@ async function runSearch() {
     'Fascicolo': document.getElementById('fascicoloSearch').value,
     'Data pubbl.': document.getElementById('dataSearch').value,
     'Nr. col. inizio': document.getElementById('colStartSearch').value,
-    'Nr. col. fine': document.getElementById('colEndSearch').value
+    'Nr. col. fine': document.getElementById('colEndSearch').value,
+    'Autore1': document.getElementById('autore1Search')?.value,
+    'Autore2': document.getElementById('autore2Search')?.value,
+    'Autore3': document.getElementById('autore3Search')?.value,
+    'Autore4': document.getElementById('autore4Search')?.value,
   };
 
   const results = searchDatabase(queries, Object.keys(queries));
