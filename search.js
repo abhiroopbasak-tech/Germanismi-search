@@ -1,4 +1,7 @@
 let data = [];
+volume = 1;
+page = 1;
+
 
 async function loadData() {
   const response = await fetch('data/germanismi.tsv');
@@ -158,3 +161,54 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('searchBtn').addEventListener('click', runSearch);
   loadData();
 });
+function renderTable(rows, headers) {
+  const container = document.getElementById('results');
+  if (!rows.length) {
+    container.innerHTML = '<p>No results found.</p>';
+    return;
+  }
+
+  const thead = `
+    <thead>
+      <tr>
+        <th>🔗</th>
+        ${headers.map(h => `<th>${h}</th>`).join('')}
+      </tr>
+    </thead>
+  `;
+
+  const svgIcon = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+         class="bi bi-box-arrow-up-right" viewBox="0 0 16 16">
+      <path fill-rule="evenodd"
+            d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 
+               1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 
+               .5-.5h6.636a.5.5 0 0 0 .5-.5"/>
+      <path fill-rule="evenodd"
+            d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 
+               9.146a.5.5 0 1 0 .708.708L15 
+               1.707V5.5a.5.5 0 0 0 1 0z"/>
+    </svg>
+  `;
+
+  const tbody = rows.map(row => {
+    const volumeText = row['Volume'] || '';
+    const pageText = row['Nr. col. inizio'] || '';
+
+    // Extract numeric volume (e.g., "1" from "1 - GERM")
+    let volume = (volumeText.match(/^(\d+)/) || [])[1];
+    // Extract numeric page (e.g., "23" from "23-24")
+    let page = (pageText.match(/^(\d+)/) || [])[1];
+
+    // Fallback defaults
+    if (!volume || isNaN(volume)) volume = '1';
+    if (!page || isNaN(page)) page = '1';
+
+    const url = `https://stampa.lei-digitale.it/volumes/?sector=germanismi&volume=${volume}&page=${page}`;
+    const linkCell = `<td><a href="${url}" target="_blank" title="Open article">${svgIcon}</a></td>`;
+    const dataCells = headers.map(h => `<td>${row[h] || ''}</td>`).join('');
+    return `<tr>${linkCell}${dataCells}</tr>`;
+  }).join('');
+
+  container.innerHTML = `<table class="styled-table">${thead}<tbody>${tbody}</tbody></table>`;
+}
